@@ -1,0 +1,154 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
+
+namespace Leauge_Auto_Accept
+{
+    public class ItemList
+    {
+        public string Name { get; set; }
+        public string Id { get; set; }
+        public bool Free { get; set; }
+    }
+
+    internal class Data
+    {
+        public static List<ItemList> champsSorterd = new List<ItemList>();
+        public static List<ItemList> spellsSorted = new List<ItemList>();
+
+        public static string currentSummonerId = "";
+        public static string currentChatId = "";
+
+        public static void LoadSummonerId()
+        {
+            if (currentSummonerId == "")
+            {
+                Print.printCentered("Getting summoner ID...", 15);
+                string[] currentSummoner = LCU.clientRequestUntilSuccess("GET", "lol-summoner/v1/current-summoner");
+                Console.Clear();
+                currentSummonerId = currentSummoner[1].Split("summonerId\":")[1].Split(',')[0];
+            }
+        }
+
+        public static void LoadPlayerChatId()
+        {
+            string[] myChatProfile = LCU.clientRequest("GET", "lol-chat/v1/me");
+            currentChatId = myChatProfile[1].Split("\"id\":\"")[1].Split("\",")[0];
+            currentSummonerId = myChatProfile[1].Split("\"summonerId\":")[1].Split(",\"")[0];
+        }
+
+        public static void LoadChampionsList()
+        {
+            Console.Clear();
+
+            if (!champsSorterd.Any())
+            {
+                LoadSummonerId();
+
+                List<ItemList> champs = new List<ItemList>();
+
+                Print.printCentered("Getting champions and ownership list...", 15);
+                string[] ownedChamps = LCU.clientRequestUntilSuccess("GET", "lol-champions/v1/inventories/" + currentSummonerId + "/champions-minimal");
+                Console.Clear();
+                string[] champsSplit = ownedChamps[1].Split("},{");
+                Debug.WriteLine(ownedChamps[1]);
+
+                foreach (var champ in champsSplit)
+                {
+                    string champName = champ.Split("name\":\"")[1].Split('"')[0];
+                    string champId = champ.Split("id\":")[1].Split(',')[0];
+                    string champOwned = champ.Split("owned\":")[1].Split(',')[0];
+                    string champFreeXboxPass = champ.Split("xboxGPReward\":")[1].Split('}')[0];
+                    string champFree = champ.Split("freeToPlay\":")[1].Split(',')[0];
+
+                    // For some reason Riot provides a "None" champion
+                    if (champName == "None") continue;
+
+                    // Fuck the yeti
+                    if (champName == "Nunu & Willump") champName = "Nunu";
+
+                    // Check if the champ can be picked
+                    bool isAvailable;
+                    if (champOwned == "true" || champFree == "true" || champFreeXboxPass == "true") isAvailable = true;
+                    else isAvailable = false;
+                    champs.Add(new ItemList() { Name = champName, Id = champId, Free = isAvailable });
+                }
+
+                // Sort alphabetically
+                champsSorterd = champs.OrderBy(o => o.Name).ToList();
+            }
+
+            SizeHandler.ResizeBasedOnChampsCount();
+            Console.Clear();
+        }
+
+        public static void LoadSpellsList()
+        {
+            Console.Clear();
+            if (!spellsSorted.Any())
+            {
+                LoadSummonerId();
+
+                List<string> enabledSpells = new List<string>();
+
+                Print.printCentered("Getting a list of available summoner spells...", 15);
+                string[] availableSpells = LCU.clientRequestUntilSuccess("GET", "lol-collections/v1/inventories/" + currentSummonerId + "/spells");
+                Console.Clear();
+                string[] spellsSplit = availableSpells[1].Split('[')[1].Split(']')[0].Split(',');
+
+                Print.printCentered("Getting a list of available gamemodes...", 15);
+                string[] platformConfig = LCU.clientRequestUntilSuccess("GET", "lol-platform-config/v1/namespaces");
+                Console.Clear();
+                string[] enabledGameModes = platformConfig[1].Split("EnabledModes\":[")[1].Split(']')[0].Split(',');
+                string[] inactiveSpellsPerGameMode = platformConfig[1].Split("gameModeToInactiveSpellIds\":{")[1].Split('}')[0].Split("],");
+
+                Console.Clear();
+                foreach (var gameMode in enabledGameModes)
+                {
+                    foreach (var gameMode2 in inactiveSpellsPerGameMode)
+                    {
+                        string gameMode2tmp = gameMode2 + "]".Replace("]]", "]");
+                        string gameMode2Name = gameMode2tmp.Split(':')[0];
+                        if (gameMode == gameMode2Name)
+                        {
+                            string[] inactiveSpells = gameMode2tmp.Split('[')[1].Split(']')[0].Split(',');
+                            foreach (var spell in spellsSplit)
+                            {
+                                bool isActive = true;
+                                foreach (var spellInactive in inactiveSpells)
+                                {
+                                    if (spell + ".0" == spellInactive)
+                                    {
+                                        isActive = false;
+                                        break;
+                                    }
+                                }
+                                if (isActive) enabledSpells.Add(spell);
+                            }
+                        }
+                    }
+                }
+
+                enabledSpells = enabledSpells.Distinct().ToList(); // Remove dupes
+                // Get spell names
+                Print.printCentered("Getting summoner spell names...", 15);
+                string[] spellsJson = LCU.clientRequest("GET", "lol-game-data/assets/v1/summoner-spells.json");
+                Console.Clear();
+                string[] spellsJsonSplit = spellsJson[1].Split('{');
+                foreach (var spell in enabledSpells) // Add with names
+                {
+                    string spellName = "";
+                    foreach (var spellSingle in spellsJsonSplit)
+                    {
+                        if (spellSingle == "[" || spellSingle == "]") continue;
+                        string spellId = spellSingle.Split("id\":")[1].Split(',')[0];
+                        if (spell == spellId) spellName = spellSingle.Split("name\":\"")[1].Split('"')[0];
+                    }
+                    spellsSorted.Add(new ItemList() { Name = spellName, Id = spell });
+                }
+                spellsSorted = spellsSorted.OrderBy(o => o.Name).ToList(); // alphabetically sorting
+            }
+        }
+    }
+}
