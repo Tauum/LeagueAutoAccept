@@ -3,11 +3,14 @@ using System.Linq;
 using System.Threading;
 
 //1. (play -> lanes -> search -> normal path)
-//2. setup custom profile select as menu option
+//2. setup custom profile select as menu option (champs/lanes)
 //3. (title, champ, lanes, rune, spells)
 //4. backup ban / ban priority based on role
+//5. fix option to allow "close client while ingame" - so it does not break this
 
-// currently: auto honor and honor skip but is broken in settings?
+// currently: auto honor and honor skip enablle but seem unmanaged state
+// and enabling skip statistics will completely break?
+// once enabling setting works test and start on above
 namespace Leauge_Auto_Accept
 {
     public class MainLogic
